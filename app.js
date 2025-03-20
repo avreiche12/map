@@ -1,66 +1,48 @@
-import React, { useState, useEffect, useRef } from 'react';
-import _ from 'lodash';
-
+// PropertyMapGenerator Component
 const PropertyMapGenerator = () => {
-  const mapRef = useRef(null);
-  const [map, setMap] = useState(null);
-  const [markers, setMarkers] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const mapRef = React.useRef(null);
+  const [map, setMap] = React.useState(null);
+  const [markers, setMarkers] = React.useState([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState(null);
   
-  const [primaryAddress, setPrimaryAddress] = useState('');
-  const [compAddresses, setCompAddresses] = useState(['', '', '', '', '', '']);
-  const [mapTitle, setMapTitle] = useState('Property Comparison Map');
-  const [primaryColor, setPrimaryColor] = useState('#FF5733');
-  const [compColor, setCompColor] = useState('#3366FF');
-  const [showLabels, setShowLabels] = useState(true);
-  const [mapStyle, setMapStyle] = useState('light');
+  const [primaryAddress, setPrimaryAddress] = React.useState('');
+  const [compAddresses, setCompAddresses] = React.useState(['', '', '', '', '', '']);
+  const [mapTitle, setMapTitle] = React.useState('Property Comparison Map');
+  const [primaryColor, setPrimaryColor] = React.useState('#FF5733');
+  const [compColor, setCompColor] = React.useState('#3366FF');
+  const [showLabels, setShowLabels] = React.useState(true);
+  const [mapStyle, setMapStyle] = React.useState('light');
   
   // Initialize the map when component mounts
-  useEffect(() => {
-    // Create script elements for leaflet CSS and JS
-    const linkElement = document.createElement('link');
-    linkElement.rel = 'stylesheet';
-    linkElement.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
-    document.head.appendChild(linkElement);
-    
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
-    script.async = true;
-    
-    script.onload = () => {
-      if (mapRef.current && !map) {
-        // Initialize map
-        const newMap = L.map(mapRef.current).setView([37.7749, -122.4194], 12);
+  React.useEffect(() => {
+    if (mapRef.current && !map) {
+      // Initialize map
+      const newMap = L.map(mapRef.current).setView([37.7749, -122.4194], 12);
+      
+      // Add tile layer based on selected style
+      const tileLayer = mapStyle === 'light' 
+        ? L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          })
+        : L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          });
         
-        // Add tile layer based on selected style
-        const tileLayer = mapStyle === 'light' 
-          ? L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-              attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            })
-          : L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-              attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-            });
-          
-        tileLayer.addTo(newMap);
-        setMap(newMap);
-      }
-    };
-    
-    document.body.appendChild(script);
+      tileLayer.addTo(newMap);
+      setMap(newMap);
+    }
     
     // Cleanup function
     return () => {
       if (map) {
         map.remove();
       }
-      document.head.removeChild(linkElement);
-      document.body.removeChild(script);
     };
   }, []);
   
   // Update tile layer when map style changes
-  useEffect(() => {
+  React.useEffect(() => {
     if (map) {
       // Remove existing tile layers
       map.eachLayer(layer => {
@@ -184,10 +166,12 @@ const PropertyMapGenerator = () => {
   };
   
   // Debounced version of updateMarkers to prevent too many API calls
-  const debouncedUpdateMarkers = useRef(_.debounce(updateMarkers, 1000)).current;
+  const debouncedUpdateMarkers = React.useCallback(_.debounce(() => {
+    updateMarkers();
+  }, 1000), [primaryAddress, compAddresses, primaryColor, compColor, showLabels, map]);
   
   // Update markers when addresses change
-  useEffect(() => {
+  React.useEffect(() => {
     if (map) {
       debouncedUpdateMarkers();
     }
@@ -209,6 +193,18 @@ const PropertyMapGenerator = () => {
     const newAddresses = [...compAddresses];
     newAddresses[index] = value;
     setCompAddresses(newAddresses);
+  };
+  
+  const handleBulkAddressInput = (text) => {
+    const addresses = text.split('\n')
+      .filter(line => line.trim().length > 0);
+    
+    if (addresses.length === 0) return;
+    
+    setPrimaryAddress(addresses[0]);
+    
+    const comps = addresses.slice(1, 13); // Limit to 12 comps
+    setCompAddresses(comps.length > 0 ? comps : ['']);
   };
   
   const exportMap = () => {
@@ -258,10 +254,9 @@ const PropertyMapGenerator = () => {
     
     titleControl.addTo(map);
     
-    // Use leaflet-image for export (in a real implementation)
+    // Use html2canvas for export
     setTimeout(() => {
-      // In a real implementation, we would use leaflet-image or html2canvas
-      // to capture the map as an image
+      // In a real implementation, we would use html2canvas
       alert('In a full implementation, this would save the map as an image file. You would be able to download a PNG or PDF of this map.');
       
       // Remove the legend and title after export
@@ -295,19 +290,7 @@ const PropertyMapGenerator = () => {
                   className="w-full p-2 border border-gray-300 rounded"
                   rows="6"
                   placeholder="Paste all addresses here - first address will be primary, rest will be comparables"
-                  onChange={(e) => {
-                    const addresses = e.target.value.split('\n')
-                      .map(addr => addr.trim())
-                      .filter(addr => addr.length > 0);
-                    
-                    if (addresses.length > 0) {
-                      setPrimaryAddress(addresses[0]);
-                      setCompAddresses(addresses.slice(1, 13)); // Limit to 12 comps
-                    } else {
-                      setPrimaryAddress('');
-                      setCompAddresses(['']);
-                    }
-                  }}
+                  onChange={(e) => handleBulkAddressInput(e.target.value)}
                 ></textarea>
               </div>
               <div className="text-xs text-gray-600 mb-4">
@@ -445,4 +428,5 @@ const PropertyMapGenerator = () => {
   );
 };
 
-export default PropertyMapGenerator;
+// Render the component
+ReactDOM.render(<PropertyMapGenerator />, document.getElementById('root'));
