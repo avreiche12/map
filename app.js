@@ -16,7 +16,7 @@ const PropertyMapGenerator = () => {
   const [primaryColor, setPrimaryColor] = React.useState('#FF5733');
   const [compColor, setCompColor] = React.useState('#3366FF');
   const [mapStyle, setMapStyle] = React.useState('streets-v11');
-  const [mapboxToken, setMapboxToken] = React.useState('');
+  const [mapboxToken, setMapboxToken] = React.useState('pk.eyJ1IjoidnJlaWNoZSIsImEiOiJjbThodHEza2YwNWY1Mm1wenltdnMwN3AxIn0.8NiWuvDaWLPs_hmQt_8eCQ');
   const [showLegend, setShowLegend] = React.useState(true);
   const [mapInitialized, setMapInitialized] = React.useState(false);
   
