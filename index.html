@@ -18,6 +18,9 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
     
+    <!-- html2canvas for export functionality -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
     <!-- Tailwind CSS -->
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     
@@ -31,6 +34,11 @@
             padding: 10px;
             border-radius: 5px;
             border: 1px solid #ccc;
+        }
+        /* Hide leaflet attribution */
+        .leaflet-control-attribution {
+            font-size: 8px;
+            opacity: 0.5;
         }
     </style>
 </head>
