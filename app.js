@@ -15,8 +15,8 @@ const PropertyMapGenerator = () => {
   const [mapTitle, setMapTitle] = React.useState('Property Comparison Map');
   const [primaryColor, setPrimaryColor] = React.useState('#FF5733');
   const [compColor, setCompColor] = React.useState('#3366FF');
-  const [mapStyle, setMapStyle] = React.useState('minimal');
-  const [colorPalette, setColorPalette] = React.useState('color');
+  const [mapStyle, setMapStyle] = React.useState('streets');
+  const [mapboxToken, setMapboxToken] = React.useState('pk.eyJ1IjoidnJlaWNoZSIsImEiOiJjbThodHEza2YwNWY1Mm1wenltdnMwN3AxIn0.8NiWuvDaWLPs_hmQt_8eCQ');
   const [showLegend, setShowLegend] = React.useState(true);
   
   // Radius circle settings
@@ -27,31 +27,35 @@ const PropertyMapGenerator = () => {
   
   // Map style options
   const mapStyles = {
-    minimal: {
-      name: 'Minimal',
-      url: 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+    streets: {
+      name: 'Streets',
+      url: 'mapbox://styles/mapbox/streets-v11',
+      attribution: '© <a href="https://www.mapbox.com/about/maps/">Mapbox</a>'
+    },
+    light: {
+      name: 'Light',
+      url: 'mapbox://styles/mapbox/light-v10',
+      attribution: '© <a href="https://www.mapbox.com/about/maps/">Mapbox</a>'
     },
     dark: {
       name: 'Dark',
-      url: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+      url: 'mapbox://styles/mapbox/dark-v10',
+      attribution: '© <a href="https://www.mapbox.com/about/maps/">Mapbox</a>'
     },
-    grayscale: {
-      name: 'Grayscale',
-      url: 'https://stamen-tiles-{s}.a.ssl.fastly.net/toner-lite/{z}/{x}/{y}{r}.png',
-      attribution: 'Map tiles by <a href="http://stamen.com">Stamen Design</a>, <a href="http://creativecommons.org/licenses/by/3.0">CC BY 3.0</a> &mdash; Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-    },
-    blueprint: {
-      name: 'Blueprint',
-      url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+    satellite: {
+      name: 'Satellite',
+      url: 'mapbox://styles/mapbox/satellite-streets-v11',
+      attribution: '© <a href="https://www.mapbox.com/about/maps/">Mapbox</a>'
     }
   };
   
   // Initialize the map when component mounts
   React.useEffect(() => {
-    if (mapRef.current && !map) {
+    if (mapRef.current && !map && mapboxToken) {
+      // Set Mapbox access token
+      L.mapbox = L.mapbox || {};
+      L.mapbox.accessToken = mapboxToken;
+      
       // Initialize map
       const newMap = L.map(mapRef.current, {
         zoomControl: true,
@@ -65,10 +69,9 @@ const PropertyMapGenerator = () => {
         prefix: ''
       }).addTo(newMap);
       
-      // Add the selected tile layer
-      const style = mapStyles[mapStyle];
-      L.tileLayer(style.url, {
-        attribution: style.attribution,
+      // Add the selected tile layer (using Mapbox)
+      L.tileLayer('https://api.mapbox.com/styles/v1/mapbox/' + mapStyle.replace('mapbox://styles/mapbox/', '') + '/tiles/256/{z}/{x}/{y}@2x?access_token=' + mapboxToken, {
+        attribution: '© <a href="https://www.mapbox.com/about/maps/">Mapbox</a>',
         maxZoom: 19
       }).addTo(newMap);
       
@@ -81,11 +84,11 @@ const PropertyMapGenerator = () => {
         map.remove();
       }
     };
-  }, []);
+  }, [mapboxToken]);
   
   // Update tile layer when map style changes
   React.useEffect(() => {
-    if (map) {
+    if (map && mapboxToken) {
       // Remove existing tile layers
       map.eachLayer(layer => {
         if (layer instanceof L.TileLayer) {
@@ -93,14 +96,13 @@ const PropertyMapGenerator = () => {
         }
       });
       
-      // Add the selected tile layer
-      const style = mapStyles[mapStyle];
-      L.tileLayer(style.url, {
-        attribution: style.attribution,
+      // Add the selected tile layer (using Mapbox)
+      L.tileLayer('https://api.mapbox.com/styles/v1/mapbox/' + mapStyle.replace('mapbox://styles/mapbox/', '') + '/tiles/256/{z}/{x}/{y}@2x?access_token=' + mapboxToken, {
+        attribution: '© <a href="https://www.mapbox.com/about/maps/">Mapbox</a>',
         maxZoom: 19
       }).addTo(map);
     }
-  }, [map, mapStyle]);
+  }, [map, mapStyle, mapboxToken]);
   
   // Function to geocode an address using Nominatim
   const geocodeAddress = async (address) => {
@@ -435,6 +437,22 @@ const PropertyMapGenerator = () => {
             <h2 className="text-lg font-semibold mb-4">Map Configuration</h2>
             
             <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">Mapbox Access Token</label>
+              <input
+                type="text"
+                className="w-full p-2 border border-gray-300 rounded"
+                value={mapboxToken}
+                onChange={(e) => setMapboxToken(e.target.value)}
+                placeholder="Enter your Mapbox access token"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                <a href="https://account.mapbox.com/access-tokens/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700">
+                  Get a free Mapbox token here
+                </a>
+              </p>
+            </div>
+            
+            <div className="mb-4">
               <label className="block text-sm font-medium mb-1">Map Title</label>
               <input
                 type="text"
@@ -533,10 +551,10 @@ const PropertyMapGenerator = () => {
                   value={mapStyle}
                   onChange={(e) => setMapStyle(e.target.value)}
                 >
-                  <option value="minimal">Minimal</option>
-                  <option value="dark">Dark</option>
-                  <option value="grayscale">Grayscale</option>
-                  <option value="blueprint">Blueprint</option>
+                  <option value="streets-v11">Streets</option>
+                  <option value="light-v10">Light</option>
+                  <option value="dark-v10">Dark</option>
+                  <option value="satellite-streets-v11">Satellite</option>
                 </select>
               </div>
               <div>
@@ -612,11 +630,11 @@ const PropertyMapGenerator = () => {
             )}
             
             <div className="mt-4 p-2 bg-gray-100 rounded text-xs text-gray-600">
-                              <p>Powered by OpenStreetMap and Nominatim</p>
+                            <p>Powered by Mapbox</p>
               <p className="mt-1">Usage notes:</p>
               <ul className="list-disc pl-4 mt-1">
+                <li>You need a Mapbox token (free tier allows 100,000 geocoding requests/month)</li>
                 <li>Enter full addresses for best results</li>
-                <li>Allow a moment for geocoding to complete</li>
                 <li>Use the legend to identify properties</li>
                 <li>Radius circle shows distance from primary property</li>
               </ul>
