@@ -19,6 +19,12 @@ const PropertyMapGenerator = () => {
   const [colorPalette, setColorPalette] = React.useState('color');
   const [showLegend, setShowLegend] = React.useState(true);
   
+  // Radius circle settings
+  const [showRadius, setShowRadius] = React.useState(false);
+  const [radiusDistance, setRadiusDistance] = React.useState(5);
+  const [radiusColor, setRadiusColor] = React.useState('#4CAF50');
+  const [radiusCircle, setRadiusCircle] = React.useState(null);
+  
   // Map style options
   const mapStyles = {
     minimal: {
@@ -131,6 +137,12 @@ const PropertyMapGenerator = () => {
       markers.forEach(marker => map.removeLayer(marker));
       setMarkers([]);
       
+      // Clear existing radius circle
+      if (radiusCircle) {
+        map.removeLayer(radiusCircle);
+        setRadiusCircle(null);
+      }
+      
       const newMarkers = [];
       const bounds = L.latLngBounds();
       
@@ -157,6 +169,26 @@ const PropertyMapGenerator = () => {
           
           newMarkers.push(marker);
           bounds.extend([result.lat, result.lng]);
+          
+          // Add radius circle if enabled
+          if (showRadius) {
+            // Convert miles to meters (1 mile = 1609.34 meters)
+            const radiusInMeters = radiusDistance * 1609.34;
+            
+            const circle = L.circle([result.lat, result.lng], {
+              radius: radiusInMeters,
+              color: radiusColor,
+              fillColor: radiusColor,
+              fillOpacity: 0.1,
+              weight: 2
+            }).addTo(map);
+            
+            setRadiusCircle(circle);
+            
+            // Extend bounds to include circle
+            const circleBounds = circle.getBounds();
+            bounds.extend(circleBounds);
+          }
         }
       }
       
@@ -204,14 +236,14 @@ const PropertyMapGenerator = () => {
   // Debounced version of updateMarkers
   const debouncedUpdateMarkers = React.useCallback(_.debounce(() => {
     updateMarkers();
-  }, 1000), [properties, primaryColor, compColor, map]);
+  }, 1000), [properties, primaryColor, compColor, showRadius, radiusDistance, radiusColor, map]);
   
   // Update markers when properties change
   React.useEffect(() => {
     if (map) {
       debouncedUpdateMarkers();
     }
-  }, [map, properties, primaryColor, compColor]);
+  }, [map, properties, primaryColor, compColor, showRadius, radiusDistance, radiusColor]);
   
   // Handle adding a new comparable property
   const handleAddProperty = () => {
@@ -318,6 +350,16 @@ const PropertyMapGenerator = () => {
               <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${primaryProperty.name}</div>
             </div>
           `;
+          
+          // Add radius information if enabled
+          if (showRadius) {
+            html += `
+              <div style="display: flex; align-items: center; margin-bottom: 8px; margin-left: 4px;">
+                <div style="border: 2px solid ${radiusColor}; width: 14px; height: 14px; border-radius: 50%; margin-right: 8px; flex-shrink: 0;"></div>
+                <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px;">${radiusDistance} mile radius</div>
+              </div>
+            `;
+          }
         }
         
         compProperties.forEach((property, i) => {
@@ -513,6 +555,48 @@ const PropertyMapGenerator = () => {
               </div>
             </div>
             
+            {/* Radius Circle Settings */}
+            <div className="border-t border-gray-200 pt-4 mb-4">
+              <div className="flex items-center justify-between mb-3">
+                <label className="block text-sm font-medium">Radius Circle</label>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={showRadius}
+                    onChange={(e) => setShowRadius(e.target.checked)}
+                    className="mr-2"
+                  />
+                  <span className="text-sm">Show Radius</span>
+                </div>
+              </div>
+              
+              {showRadius && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Distance (miles)</label>
+                    <input
+                      type="number"
+                      min="0.1"
+                      max="50"
+                      step="0.1"
+                      className="w-full p-2 border border-gray-300 rounded"
+                      value={radiusDistance}
+                      onChange={(e) => setRadiusDistance(parseFloat(e.target.value) || 1)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Circle Color</label>
+                    <input
+                      type="color"
+                      className="w-full p-1 border border-gray-300 rounded h-10"
+                      value={radiusColor}
+                      onChange={(e) => setRadiusColor(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+            
             <button
               onClick={exportMap}
               className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
@@ -528,12 +612,13 @@ const PropertyMapGenerator = () => {
             )}
             
             <div className="mt-4 p-2 bg-gray-100 rounded text-xs text-gray-600">
-              <p>Powered by OpenStreetMap and Nominatim</p>
+                              <p>Powered by OpenStreetMap and Nominatim</p>
               <p className="mt-1">Usage notes:</p>
               <ul className="list-disc pl-4 mt-1">
                 <li>Enter full addresses for best results</li>
                 <li>Allow a moment for geocoding to complete</li>
                 <li>Use the legend to identify properties</li>
+                <li>Radius circle shows distance from primary property</li>
               </ul>
             </div>
           </div>
