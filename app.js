@@ -6,30 +6,66 @@ const PropertyMapGenerator = () => {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState(null);
   
-  const [primaryAddress, setPrimaryAddress] = React.useState('');
-  const [compAddresses, setCompAddresses] = React.useState(['', '', '', '', '', '']);
+  // Property data
+  const [properties, setProperties] = React.useState([
+    { id: 'primary', name: 'Primary Property', address: '', type: 'primary' }
+  ]);
+  
+  // UI settings
   const [mapTitle, setMapTitle] = React.useState('Property Comparison Map');
   const [primaryColor, setPrimaryColor] = React.useState('#FF5733');
   const [compColor, setCompColor] = React.useState('#3366FF');
-  const [showLabels, setShowLabels] = React.useState(true);
-  const [mapStyle, setMapStyle] = React.useState('light');
+  const [mapStyle, setMapStyle] = React.useState('minimal');
+  const [colorPalette, setColorPalette] = React.useState('color');
+  const [showLegend, setShowLegend] = React.useState(true);
+  
+  // Map style options
+  const mapStyles = {
+    minimal: {
+      name: 'Minimal',
+      url: 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+    },
+    dark: {
+      name: 'Dark',
+      url: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+    },
+    grayscale: {
+      name: 'Grayscale',
+      url: 'https://stamen-tiles-{s}.a.ssl.fastly.net/toner-lite/{z}/{x}/{y}{r}.png',
+      attribution: 'Map tiles by <a href="http://stamen.com">Stamen Design</a>, <a href="http://creativecommons.org/licenses/by/3.0">CC BY 3.0</a> &mdash; Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    },
+    blueprint: {
+      name: 'Blueprint',
+      url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+    }
+  };
   
   // Initialize the map when component mounts
   React.useEffect(() => {
     if (mapRef.current && !map) {
       // Initialize map
-      const newMap = L.map(mapRef.current).setView([37.7749, -122.4194], 12);
+      const newMap = L.map(mapRef.current, {
+        zoomControl: true,
+        attributionControl: false, // We'll add our own more discretely
+        scrollWheelZoom: true
+      }).setView([37.7749, -122.4194], 12);
       
-      // Add tile layer based on selected style
-      const tileLayer = mapStyle === 'light' 
-        ? L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          })
-        : L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          });
-        
-      tileLayer.addTo(newMap);
+      // Add a minimal attribution control in the bottom-right
+      L.control.attribution({
+        position: 'bottomright',
+        prefix: ''
+      }).addTo(newMap);
+      
+      // Add the selected tile layer
+      const style = mapStyles[mapStyle];
+      L.tileLayer(style.url, {
+        attribution: style.attribution,
+        maxZoom: 19
+      }).addTo(newMap);
+      
       setMap(newMap);
     }
     
@@ -51,16 +87,12 @@ const PropertyMapGenerator = () => {
         }
       });
       
-      // Add new tile layer based on selected style
-      const tileLayer = mapStyle === 'light' 
-        ? L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          })
-        : L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          });
-        
-      tileLayer.addTo(map);
+      // Add the selected tile layer
+      const style = mapStyles[mapStyle];
+      L.tileLayer(style.url, {
+        attribution: style.attribution,
+        maxZoom: 19
+      }).addTo(map);
     }
   }, [map, mapStyle]);
   
@@ -68,6 +100,8 @@ const PropertyMapGenerator = () => {
   const geocodeAddress = async (address) => {
     try {
       const encodedAddress = encodeURIComponent(address);
+      // Add a delay between requests to comply with Nominatim usage policy
+      await new Promise(resolve => setTimeout(resolve, 1000));
       const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodedAddress}&limit=1`);
       const data = await response.json();
       
@@ -100,51 +134,53 @@ const PropertyMapGenerator = () => {
       const newMarkers = [];
       const bounds = L.latLngBounds();
       
-      // Process primary address
-      if (primaryAddress.trim()) {
-        const primaryResult = await geocodeAddress(primaryAddress);
+      // Process primary property first
+      const primaryProperty = properties.find(p => p.type === 'primary');
+      
+      if (primaryProperty && primaryProperty.address.trim()) {
+        const result = await geocodeAddress(primaryProperty.address);
         
-        if (primaryResult) {
+        if (result) {
+          const markerHtml = `<div style="background-color: ${primaryColor}; width: 24px; height: 24px; border-radius: 50%; border: 2px solid white; display: flex; justify-content: center; align-items: center; color: white; font-weight: bold;">P</div>`;
+          
           const primaryIcon = L.divIcon({
-            html: `<div style="background-color: ${primaryColor}; width: 24px; height: 24px; border-radius: 50%; border: 2px solid white; display: flex; justify-content: center; align-items: center; color: white; font-weight: bold;">P</div>`,
+            html: markerHtml,
             className: '',
             iconSize: [24, 24],
             iconAnchor: [12, 12]
           });
           
-          const marker = L.marker([primaryResult.lat, primaryResult.lng], { icon: primaryIcon })
-            .addTo(map);
-          
-          if (showLabels) {
-            marker.bindTooltip('Primary', { permanent: true, direction: 'bottom', offset: [0, 10] });
-          }
+          const marker = L.marker([result.lat, result.lng], { 
+            icon: primaryIcon,
+            property: primaryProperty
+          }).addTo(map);
           
           newMarkers.push(marker);
-          bounds.extend([primaryResult.lat, primaryResult.lng]);
+          bounds.extend([result.lat, result.lng]);
         }
       }
       
-      // Process comparable addresses
-      const validCompAddresses = compAddresses.filter(addr => addr.trim() !== '');
+      // Process comparable properties
+      const compProperties = properties.filter(p => p.type === 'comparable' && p.address.trim());
       
-      for (let i = 0; i < validCompAddresses.length; i++) {
-        const address = validCompAddresses[i];
-        const result = await geocodeAddress(address);
+      for (let i = 0; i < compProperties.length; i++) {
+        const property = compProperties[i];
+        const result = await geocodeAddress(property.address);
         
         if (result) {
+          const markerHtml = `<div style="background-color: ${compColor}; width: 22px; height: 22px; border-radius: 50%; border: 2px solid white; display: flex; justify-content: center; align-items: center; color: white; font-size: 12px; font-weight: bold;">${i + 1}</div>`;
+          
           const compIcon = L.divIcon({
-            html: `<div style="background-color: ${compColor}; width: 18px; height: 18px; border-radius: 50%; border: 2px solid white; display: flex; justify-content: center; align-items: center; color: white; font-size: 10px;">C${i+1}</div>`,
+            html: markerHtml,
             className: '',
-            iconSize: [18, 18],
-            iconAnchor: [9, 9]
+            iconSize: [22, 22],
+            iconAnchor: [11, 11]
           });
           
-          const marker = L.marker([result.lat, result.lng], { icon: compIcon })
-            .addTo(map);
-          
-          if (showLabels) {
-            marker.bindTooltip(`Comp ${i+1}`, { permanent: true, direction: 'bottom', offset: [0, 8] });
-          }
+          const marker = L.marker([result.lat, result.lng], { 
+            icon: compIcon,
+            property: property
+          }).addTo(map);
           
           newMarkers.push(marker);
           bounds.extend([result.lat, result.lng]);
@@ -165,103 +201,186 @@ const PropertyMapGenerator = () => {
     }
   };
   
-  // Debounced version of updateMarkers to prevent too many API calls
+  // Debounced version of updateMarkers
   const debouncedUpdateMarkers = React.useCallback(_.debounce(() => {
     updateMarkers();
-  }, 1000), [primaryAddress, compAddresses, primaryColor, compColor, showLabels, map]);
+  }, 1000), [properties, primaryColor, compColor, map]);
   
-  // Update markers when addresses change
+  // Update markers when properties change
   React.useEffect(() => {
     if (map) {
       debouncedUpdateMarkers();
     }
-  }, [map, primaryAddress, compAddresses, primaryColor, compColor, showLabels]);
+  }, [map, properties, primaryColor, compColor]);
   
-  const handleAddCompAddress = () => {
-    if (compAddresses.length < 12) {
-      setCompAddresses([...compAddresses, '']);
+  // Handle adding a new comparable property
+  const handleAddProperty = () => {
+    const compCount = properties.filter(p => p.type === 'comparable').length;
+    if (compCount < 12) {
+      const newProperty = {
+        id: `comp-${Date.now()}`,
+        name: `Comparable ${compCount + 1}`,
+        address: '',
+        type: 'comparable'
+      };
+      
+      setProperties([...properties, newProperty]);
     }
   };
   
-  const handleRemoveCompAddress = (index) => {
-    const newAddresses = [...compAddresses];
-    newAddresses.splice(index, 1);
-    setCompAddresses(newAddresses);
+  // Handle removing a property
+  const handleRemoveProperty = (id) => {
+    const newProperties = properties.filter(p => p.id !== id);
+    setProperties(newProperties);
   };
   
-  const handleCompAddressChange = (index, value) => {
-    const newAddresses = [...compAddresses];
-    newAddresses[index] = value;
-    setCompAddresses(newAddresses);
+  // Handle property changes
+  const handlePropertyChange = (id, field, value) => {
+    const updatedProperties = properties.map(p => {
+      if (p.id === id) {
+        return { ...p, [field]: value };
+      }
+      return p;
+    });
+    
+    setProperties(updatedProperties);
   };
   
+  // Parse bulk input text
   const handleBulkAddressInput = (text) => {
-    const addresses = text.split('\n')
-      .filter(line => line.trim().length > 0);
+    // Split input by lines
+    const lines = text.split('\n').filter(line => line.trim().length > 0);
     
-    if (addresses.length === 0) return;
+    if (lines.length === 0) return;
     
-    setPrimaryAddress(addresses[0]);
+    const newProperties = [];
     
-    const comps = addresses.slice(1, 13); // Limit to 12 comps
-    setCompAddresses(comps.length > 0 ? comps : ['']);
+    // Process each line
+    lines.forEach((line, index) => {
+      // Check if line contains a tab character or multiple spaces
+      const parts = line.split(/\t|(?:\s{2,})/);
+      
+      let name, address;
+      
+      if (parts.length >= 2) {
+        // Format: "Name [tab] Address"
+        name = parts[0].trim();
+        address = parts.slice(1).join(' ').trim();
+      } else {
+        // Just an address, no name
+        address = line.trim();
+        name = index === 0 ? 'Primary Property' : `Comparable ${index}`;
+      }
+      
+      const type = index === 0 ? 'primary' : 'comparable';
+      
+      newProperties.push({
+        id: type === 'primary' ? 'primary' : `comp-${Date.now()}-${index}`,
+        name,
+        address,
+        type
+      });
+    });
+    
+    // Update properties state
+    setProperties(newProperties);
   };
   
+  // Export map as PNG
   const exportMap = () => {
     if (!map) return;
     
-    // Create a basic legend element
-    const legendControl = L.control({ position: 'bottomleft' });
-    legendControl.onAdd = function() {
-      const div = L.DomUtil.create('div', 'legend');
-      div.style.backgroundColor = 'white';
-      div.style.padding = '10px';
-      div.style.borderRadius = '5px';
-      div.style.border = '1px solid #ccc';
-      div.style.marginBottom = '30px';
+    // Create a legend element if it doesn't exist
+    let legendControl = document.querySelector('.map-legend-control');
+    if (!legendControl) {
+      legendControl = L.control({ position: 'bottomright' });
+      legendControl.onAdd = function() {
+        const div = L.DomUtil.create('div', 'map-legend-control legend');
+        div.style.backgroundColor = 'white';
+        div.style.padding = '10px';
+        div.style.borderRadius = '5px';
+        div.style.border = '1px solid #ccc';
+        div.style.marginBottom = '10px';
+        div.style.maxWidth = '250px';
+        div.style.maxHeight = '400px';
+        div.style.overflowY = 'auto';
+        div.style.fontSize = '12px';
+        
+        const primaryProperty = properties.find(p => p.type === 'primary');
+        const compProperties = properties.filter(p => p.type === 'comparable' && p.address.trim());
+        
+        let html = `<div style="font-weight: bold; margin-bottom: 10px; font-size: 14px;">${mapTitle}</div>`;
+        
+        if (primaryProperty) {
+          html += `
+            <div style="display: flex; align-items: center; margin-bottom: 8px;">
+              <div style="background-color: ${primaryColor}; width: 16px; height: 16px; border-radius: 50%; margin-right: 8px; flex-shrink: 0;"></div>
+              <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${primaryProperty.name}</div>
+            </div>
+          `;
+        }
+        
+        compProperties.forEach((property, i) => {
+          html += `
+            <div style="display: flex; align-items: center; margin-bottom: 6px;">
+              <div style="background-color: ${compColor}; width: 16px; height: 16px; border-radius: 50%; margin-right: 8px; flex-shrink: 0; display: flex; justify-content: center; align-items: center; color: white; font-size: 10px; font-weight: bold;">${i + 1}</div>
+              <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${property.name}</div>
+            </div>
+          `;
+        });
+        
+        div.innerHTML = html;
+        return div;
+      };
       
-      div.innerHTML = `
-        <div style="font-weight: bold; margin-bottom: 5px;">${mapTitle}</div>
-        <div style="display: flex; align-items: center; margin-bottom: 5px;">
-          <div style="background-color: ${primaryColor}; width: 12px; height: 12px; border-radius: 50%; margin-right: 5px;"></div>
-          <div>Primary Location</div>
-        </div>
-        <div style="display: flex; align-items: center;">
-          <div style="background-color: ${compColor}; width: 12px; height: 12px; border-radius: 50%; margin-right: 5px;"></div>
-          <div>Comparable Properties</div>
-        </div>
-      `;
+      legendControl.addTo(map);
+    }
+    
+    // Add title to the map
+    let titleControl = document.querySelector('.map-title-control');
+    if (!titleControl) {
+      titleControl = L.control({ position: 'topleft' });
+      titleControl.onAdd = function() {
+        const div = L.DomUtil.create('div', 'map-title-control');
+        div.style.backgroundColor = 'white';
+        div.style.padding = '5px 10px';
+        div.style.borderRadius = '5px';
+        div.style.border = '1px solid #ccc';
+        div.style.fontSize = '16px';
+        div.style.fontWeight = 'bold';
+        div.innerHTML = mapTitle;
+        return div;
+      };
       
-      return div;
-    };
-    
-    // Add the legend to the map
-    legendControl.addTo(map);
-    
-    // Add the title to the map
-    const titleControl = L.control({ position: 'topleft' });
-    titleControl.onAdd = function() {
-      const div = L.DomUtil.create('div', 'title');
-      div.style.backgroundColor = 'white';
-      div.style.padding = '5px 10px';
-      div.style.borderRadius = '5px';
-      div.style.border = '1px solid #ccc';
-      div.style.fontSize = '16px';
-      div.style.fontWeight = 'bold';
-      div.innerHTML = mapTitle;
-      return div;
-    };
-    
-    titleControl.addTo(map);
-    
-    // Use html2canvas for export
+      titleControl.addTo(map);
+    }
+
+    // Wait for controls to render
     setTimeout(() => {
-      // In a real implementation, we would use html2canvas
-      alert('In a full implementation, this would save the map as an image file. You would be able to download a PNG or PDF of this map.');
-      
-      // Remove the legend and title after export
-      map.removeControl(legendControl);
-      map.removeControl(titleControl);
+      // Use html2canvas to capture the map
+      html2canvas(mapRef.current, {
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: null
+      }).then(canvas => {
+        // Convert canvas to PNG
+        const dataUrl = canvas.toDataURL('image/png');
+        
+        // Create a link to download the image
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = `${mapTitle.replace(/\s+/g, '_')}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        // Remove controls after export
+        map.removeControl(legendControl);
+        map.removeControl(titleControl);
+      }).catch(err => {
+        console.error('Error exporting map:', err);
+        alert('There was an error exporting the map. Please try again.');
+      });
     }, 500);
   };
   
@@ -289,58 +408,58 @@ const PropertyMapGenerator = () => {
                 <textarea
                   className="w-full p-2 border border-gray-300 rounded"
                   rows="6"
-                  placeholder="Paste all addresses here - first address will be primary, rest will be comparables"
+                  placeholder="Paste all addresses here, one per line. Format: 'Name [tab] Address'"
                   onChange={(e) => handleBulkAddressInput(e.target.value)}
                 ></textarea>
               </div>
               <div className="text-xs text-gray-600 mb-4">
-                Paste one address per line, or separate with line breaks. First address will be primary.
-              </div>
-              
-              <div className="border-t border-gray-200 pt-4 mt-2">
-                <label className="block text-sm font-medium mb-1">Primary Address</label>
-                <input
-                  type="text"
-                  className="w-full p-2 border border-gray-300 rounded"
-                  value={primaryAddress}
-                  onChange={(e) => setPrimaryAddress(e.target.value)}
-                  placeholder="Enter main property address"
-                />
+                Format examples:<br/>
+                "Primary [tab] 123 Main St, City, State"<br/>
+                "Comparable 1 [tab] 456 Oak Ave, City, State"
               </div>
             </div>
             
-            <div className="mb-4">
-              <div className="flex justify-between items-center mb-1">
-                <label className="block text-sm font-medium">Comparable Properties</label>
+            <div className="border-t border-gray-200 pt-4 mb-4">
+              <div className="flex justify-between items-center">
+                <label className="block text-sm font-medium">Properties</label>
                 <button 
-                  onClick={handleAddCompAddress}
+                  onClick={handleAddProperty}
                   className="text-sm text-blue-600 hover:text-blue-800"
-                  disabled={compAddresses.length >= 12}
+                  disabled={properties.filter(p => p.type === 'comparable').length >= 12}
                 >
-                  + Add
+                  + Add Comparable
                 </button>
               </div>
               
-              {compAddresses.map((address, index) => (
-                <div key={index} className="flex mb-2">
+              {/* Properties list with editable names and addresses */}
+              {properties.map((property) => (
+                <div key={property.id} className="mt-3 p-2 border border-gray-200 rounded">
+                  <div className="flex items-center justify-between mb-2">
+                    <input
+                      type="text"
+                      className="flex-grow p-1 border border-gray-300 rounded"
+                      value={property.name}
+                      onChange={(e) => handlePropertyChange(property.id, 'name', e.target.value)}
+                      placeholder="Property Name"
+                    />
+                    {property.type !== 'primary' && (
+                      <button
+                        onClick={() => handleRemoveProperty(property.id)}
+                        className="ml-2 px-2 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="text"
-                    className="flex-grow p-2 border border-gray-300 rounded-l"
-                    value={address}
-                    onChange={(e) => handleCompAddressChange(index, e.target.value)}
-                    placeholder={`Comp ${index + 1}`}
+                    className="w-full p-1 border border-gray-300 rounded"
+                    value={property.address}
+                    onChange={(e) => handlePropertyChange(property.id, 'address', e.target.value)}
+                    placeholder="Address"
                   />
-                  <button
-                    onClick={() => handleRemoveCompAddress(index)}
-                    className="px-2 bg-gray-200 text-gray-700 rounded-r hover:bg-gray-300"
-                  >
-                    ×
-                  </button>
                 </div>
               ))}
-              <p className="text-xs text-gray-500 mt-1">
-                {compAddresses.length}/12 comparable properties
-              </p>
             </div>
             
             <div className="grid grid-cols-2 gap-4 mb-4">
@@ -364,28 +483,34 @@ const PropertyMapGenerator = () => {
               </div>
             </div>
             
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-1">Map Style</label>
-              <select
-                className="w-full p-2 border border-gray-300 rounded"
-                value={mapStyle}
-                onChange={(e) => setMapStyle(e.target.value)}
-              >
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-              </select>
-            </div>
-            
-            <div className="mb-4">
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={showLabels}
-                  onChange={(e) => setShowLabels(e.target.checked)}
-                  className="mr-2"
-                />
-                <span className="text-sm">Show Labels</span>
-              </label>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Map Style</label>
+                <select
+                  className="w-full p-2 border border-gray-300 rounded"
+                  value={mapStyle}
+                  onChange={(e) => setMapStyle(e.target.value)}
+                >
+                  <option value="minimal">Minimal</option>
+                  <option value="dark">Dark</option>
+                  <option value="grayscale">Grayscale</option>
+                  <option value="blueprint">Blueprint</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Legend</label>
+                <div className="flex items-center h-10">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={showLegend}
+                      onChange={(e) => setShowLegend(e.target.checked)}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">Show Legend</span>
+                  </label>
+                </div>
+              </div>
             </div>
             
             <button
@@ -393,7 +518,7 @@ const PropertyMapGenerator = () => {
               className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
               disabled={loading}
             >
-              {loading ? 'Processing...' : 'Export Map'}
+              {loading ? 'Processing...' : 'Export Map (PNG)'}
             </button>
             
             {error && (
@@ -408,7 +533,7 @@ const PropertyMapGenerator = () => {
               <ul className="list-disc pl-4 mt-1">
                 <li>Enter full addresses for best results</li>
                 <li>Allow a moment for geocoding to complete</li>
-                <li>Set a reasonable delay between API requests (~1 second)</li>
+                <li>Use the legend to identify properties</li>
               </ul>
             </div>
           </div>
@@ -421,6 +546,39 @@ const PropertyMapGenerator = () => {
             <div className="border border-gray-300 rounded overflow-hidden" style={{ height: "500px" }}>
               <div ref={mapRef} style={{ width: "100%", height: "100%" }}></div>
             </div>
+            
+            {/* Property Legend (displayed on desktop devices next to map) */}
+            {showLegend && (
+              <div className="mt-4 p-3 border border-gray-200 rounded overflow-y-auto max-h-48 hidden md:block">
+                <div className="font-semibold mb-2">Property Legend</div>
+                
+                {/* Primary property */}
+                {properties.filter(p => p.type === 'primary').map(property => (
+                  <div key={property.id} className="flex items-center mb-2">
+                    <div 
+                      className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mr-2" 
+                      style={{ backgroundColor: primaryColor }}
+                    >
+                      <span className="text-white text-xs font-bold">P</span>
+                    </div>
+                    <div className="flex-grow truncate text-sm">{property.name}</div>
+                  </div>
+                ))}
+                
+                {/* Comparable properties */}
+                {properties.filter(p => p.type === 'comparable').map((property, i) => (
+                  <div key={property.id} className="flex items-center mb-1">
+                    <div 
+                      className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mr-2" 
+                      style={{ backgroundColor: compColor }}
+                    >
+                      <span className="text-white text-xs font-bold">{i + 1}</span>
+                    </div>
+                    <div className="flex-grow truncate text-sm">{property.name}</div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
