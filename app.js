@@ -8,22 +8,31 @@ const PropertyMapGenerator = () => {
   
   // Property data
   const [properties, setProperties] = React.useState([
-    { id: 'primary', name: 'Primary Property', address: '', type: 'primary' }
+    { 
+      id: 'primary', 
+      name: 'Primary Property', 
+      address: '', 
+      type: 'primary',
+      gla: '',
+      occupancy: '',
+      rate: ''
+    }
   ]);
   
   // UI settings
   const [mapTitle, setMapTitle] = React.useState('Property Comparison Map');
   const [primaryColor, setPrimaryColor] = React.useState('#FF5733');
   const [compColor, setCompColor] = React.useState('#3366FF');
+  const [hospitalColor, setHospitalColor] = React.useState('#4CAF50');
   const [mapStyle, setMapStyle] = React.useState('streets-v11');
-  const [mapboxToken, setMapboxToken] = React.useState('pk.eyJ1IjoidnJlaWNoZSIsImEiOiJjbThodHEza2YwNWY1Mm1wenltdnMwN3AxIn0.8NiWuvDaWLPs_hmQt_8eCQ');
+  const [mapboxToken, setMapboxToken] = React.useState('');
   const [showLegend, setShowLegend] = React.useState(true);
   const [mapInitialized, setMapInitialized] = React.useState(false);
   
   // Radius circle settings
   const [showRadius, setShowRadius] = React.useState(false);
   const [radiusDistance, setRadiusDistance] = React.useState(5);
-  const [radiusColor, setRadiusColor] = React.useState('#4CAF50');
+  const [radiusColor, setRadiusColor] = React.useState('#9C27B0');
   const [radiusCircle, setRadiusCircle] = React.useState(null);
   
   // Default Mapbox public styles
@@ -160,6 +169,7 @@ const PropertyMapGenerator = () => {
       const newMarkers = [];
       const bounds = L.latLngBounds();
       let hasValidMarkers = false;
+      let primaryLocation = null;
       
       // Process primary property first
       const primaryProperty = properties.find(p => p.type === 'primary');
@@ -168,6 +178,8 @@ const PropertyMapGenerator = () => {
         const result = await geocodeAddress(primaryProperty.address);
         
         if (result) {
+          primaryLocation = result;
+          
           const markerHtml = `<div style="background-color: ${primaryColor}; width: 24px; height: 24px; border-radius: 50%; border: 2px solid white; display: flex; justify-content: center; align-items: center; color: white; font-weight: bold;">P</div>`;
           
           const primaryIcon = L.divIcon({
@@ -185,40 +197,28 @@ const PropertyMapGenerator = () => {
           newMarkers.push(marker);
           bounds.extend([result.lat, result.lng]);
           hasValidMarkers = true;
-          
-          // Add radius circle if enabled
-          if (showRadius) {
-            // Convert miles to meters (1 mile = 1609.34 meters)
-            const radiusInMeters = radiusDistance * 1609.34;
-            
-            const circle = L.circle([result.lat, result.lng], {
-              radius: radiusInMeters,
-              color: radiusColor,
-              fillColor: radiusColor,
-              fillOpacity: 0.1,
-              weight: 2
-            }).addTo(map);
-            
-            setRadiusCircle(circle);
-            
-            // Extend bounds to include circle
-            const circleBounds = circle.getBounds();
-            bounds.extend(circleBounds);
-          }
         }
       }
       
-      // Process comparable properties
-      const compProperties = properties.filter(p => p.type === 'comparable' && p.address.trim());
+      // Process hospital and comparable properties
+      const otherProperties = properties.filter(p => p.type !== 'primary' && p.address.trim());
+      let compCounter = 0;
       
-      for (let i = 0; i < compProperties.length; i++) {
-        const property = compProperties[i];
+      for (let i = 0; i < otherProperties.length; i++) {
+        const property = otherProperties[i];
         const result = await geocodeAddress(property.address);
         
         if (result) {
-          const markerHtml = `<div style="background-color: ${compColor}; width: 22px; height: 22px; border-radius: 50%; border: 2px solid white; display: flex; justify-content: center; align-items: center; color: white; font-size: 12px; font-weight: bold;">${i + 1}</div>`;
+          let markerHtml;
           
-          const compIcon = L.divIcon({
+          if (property.type === 'hospital') {
+            markerHtml = `<div style="background-color: ${hospitalColor}; width: 22px; height: 22px; border-radius: 50%; border: 2px solid white; display: flex; justify-content: center; align-items: center; color: white; font-size: 12px; font-weight: bold;">H</div>`;
+          } else {
+            compCounter++;
+            markerHtml = `<div style="background-color: ${compColor}; width: 22px; height: 22px; border-radius: 50%; border: 2px solid white; display: flex; justify-content: center; align-items: center; color: white; font-size: 12px; font-weight: bold;">${compCounter}</div>`;
+          }
+          
+          const icon = L.divIcon({
             html: markerHtml,
             className: '',
             iconSize: [22, 22],
@@ -226,7 +226,7 @@ const PropertyMapGenerator = () => {
           });
           
           const marker = L.marker([result.lat, result.lng], { 
-            icon: compIcon,
+            icon: icon,
             property: property
           }).addTo(map);
           
@@ -237,6 +237,26 @@ const PropertyMapGenerator = () => {
       }
       
       setMarkers(newMarkers);
+      
+      // Add radius circle if enabled and primary property is geocoded
+      if (showRadius && primaryLocation) {
+        // Convert miles to meters (1 mile = 1609.34 meters)
+        const radiusInMeters = radiusDistance * 1609.34;
+        
+        const circle = L.circle([primaryLocation.lat, primaryLocation.lng], {
+          radius: radiusInMeters,
+          color: radiusColor,
+          fillColor: radiusColor,
+          fillOpacity: 0.1,
+          weight: 2
+        }).addTo(map);
+        
+        setRadiusCircle(circle);
+        
+        // Extend bounds to include circle
+        const circleBounds = circle.getBounds();
+        bounds.extend(circleBounds);
+      }
       
       // Fit map to bounds if we have markers
       if (hasValidMarkers) {
@@ -252,19 +272,37 @@ const PropertyMapGenerator = () => {
     }
   };
   
-  // Handle adding a new comparable property
-  const handleAddProperty = () => {
+  // Handle adding a new property
+  const handleAddProperty = (type) => {
     const compCount = properties.filter(p => p.type === 'comparable').length;
-    if (compCount < 12) {
-      const newProperty = {
-        id: `comp-${Date.now()}`,
-        name: `Comparable ${compCount + 1}`,
-        address: '',
-        type: 'comparable'
-      };
-      
-      setProperties([...properties, newProperty]);
+    const hospitalCount = properties.filter(p => p.type === 'hospital').length;
+    
+    let newName, newType;
+    
+    if (type === 'hospital') {
+      newName = `Hospital ${hospitalCount + 1}`;
+      newType = 'hospital';
+    } else {
+      newName = `Comparable ${compCount + 1}`;
+      newType = 'comparable';
     }
+    
+    if ((newType === 'comparable' && compCount >= 12) || 
+        (newType === 'hospital' && hospitalCount >= 5)) {
+      return;
+    }
+    
+    const newProperty = {
+      id: `${newType}-${Date.now()}`,
+      name: newName,
+      address: '',
+      type: newType,
+      gla: '',
+      occupancy: '',
+      rate: ''
+    };
+    
+    setProperties([...properties, newProperty]);
   };
   
   // Handle removing a property
@@ -278,6 +316,18 @@ const PropertyMapGenerator = () => {
     const updatedProperties = properties.map(p => {
       if (p.id === id) {
         return { ...p, [field]: value };
+      }
+      return p;
+    });
+    
+    setProperties(updatedProperties);
+  };
+  
+  // Change property type
+  const handlePropertyTypeChange = (id, newType) => {
+    const updatedProperties = properties.map(p => {
+      if (p.id === id) {
+        return { ...p, type: newType };
       }
       return p;
     });
@@ -299,7 +349,15 @@ const PropertyMapGenerator = () => {
       // Check if line contains a tab character or multiple spaces
       const parts = line.split(/\t|(?:\s{2,})/);
       
-      let name, address;
+      let name, address, type = index === 0 ? 'primary' : 'comparable';
+      
+      // Check if the name contains "Hospital" or "Medical" to auto-categorize
+      if (index > 0 && parts[0] && (
+          parts[0].toLowerCase().includes('hospital') || 
+          parts[0].toLowerCase().includes('medical center') ||
+          parts[0].toLowerCase().includes('healthcare'))) {
+        type = 'hospital';
+      }
       
       if (parts.length >= 2) {
         // Format: "Name [tab] Address"
@@ -308,21 +366,41 @@ const PropertyMapGenerator = () => {
       } else {
         // Just an address, no name
         address = line.trim();
-        name = index === 0 ? 'Primary Property' : `Comparable ${index}`;
+        name = index === 0 ? 'Primary Property' : 
+               type === 'hospital' ? `Hospital ${index}` : `Comparable ${index}`;
       }
       
-      const type = index === 0 ? 'primary' : 'comparable';
-      
       newProperties.push({
-        id: type === 'primary' ? 'primary' : `comp-${Date.now()}-${index}`,
+        id: type === 'primary' ? 'primary' : `${type}-${Date.now()}-${index}`,
         name,
         address,
-        type
+        type,
+        gla: '',
+        occupancy: '',
+        rate: ''
       });
     });
     
     // Update properties state
     setProperties(newProperties);
+  };
+  
+  // Format numbers for display
+  const formatNumber = (value, type) => {
+    if (!value) return '';
+    
+    const num = parseFloat(value);
+    if (isNaN(num)) return value;
+    
+    if (type === 'gla') {
+      return num.toLocaleString() + ' SF';
+    } else if (type === 'occupancy') {
+      return num + '%';
+    } else if (type === 'rate') {
+      return '$' + num.toFixed(2) + '/SF';
+    }
+    
+    return value;
   };
   
   // Export map as PNG
@@ -335,7 +413,7 @@ const PropertyMapGenerator = () => {
       // Create a legend element if it doesn't exist
       let legendControl = document.querySelector('.map-legend-control');
       if (!legendControl) {
-        legendControl = L.control({ position: 'bottomright' });
+        legendControl = L.control({ position: 'topright' });
         legendControl.onAdd = function() {
           const div = L.DomUtil.create('div', 'map-legend-control legend');
           div.style.backgroundColor = 'white';
@@ -349,6 +427,7 @@ const PropertyMapGenerator = () => {
           div.style.fontSize = '12px';
           
           const primaryProperty = properties.find(p => p.type === 'primary');
+          const hospitalProperties = properties.filter(p => p.type === 'hospital' && p.address.trim());
           const compProperties = properties.filter(p => p.type === 'comparable' && p.address.trim());
           
           let html = `<div style="font-weight: bold; margin-bottom: 10px; font-size: 14px;">${mapTitle}</div>`;
@@ -372,10 +451,23 @@ const PropertyMapGenerator = () => {
             }
           }
           
-          compProperties.forEach((property, i) => {
+          // Add hospitals
+          hospitalProperties.forEach((property, i) => {
             html += `
               <div style="display: flex; align-items: center; margin-bottom: 6px;">
-                <div style="background-color: ${compColor}; width: 16px; height: 16px; border-radius: 50%; margin-right: 8px; flex-shrink: 0; display: flex; justify-content: center; align-items: center; color: white; font-size: 10px; font-weight: bold;">${i + 1}</div>
+                <div style="background-color: ${hospitalColor}; width: 16px; height: 16px; border-radius: 50%; margin-right: 8px; flex-shrink: 0; display: flex; justify-content: center; align-items: center; color: white; font-size: 10px; font-weight: bold;">H</div>
+                <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${property.name}</div>
+              </div>
+            `;
+          });
+          
+          // Add comparable properties
+          let compCount = 0;
+          compProperties.forEach((property) => {
+            compCount++;
+            html += `
+              <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                <div style="background-color: ${compColor}; width: 16px; height: 16px; border-radius: 50%; margin-right: 8px; flex-shrink: 0; display: flex; justify-content: center; align-items: center; color: white; font-size: 10px; font-weight: bold;">${compCount}</div>
                 <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${property.name}</div>
               </div>
             `;
@@ -454,12 +546,13 @@ const PropertyMapGenerator = () => {
   
   return (
     <div className="w-full max-w-6xl mx-auto p-4">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Input section */}
-        <div className="md:col-span-1">
-          <div className="bg-white p-4 rounded shadow">
-            <h2 className="text-lg font-semibold mb-4">Map Configuration</h2>
-            
+      {/* Configuration Section (Full Width) */}
+      <div className="bg-white p-4 rounded shadow mb-6">
+        <h2 className="text-lg font-semibold mb-4">Map Configuration</h2>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Map Settings */}
+          <div>
             <div className="mb-4">
               <label className="block text-sm font-medium mb-1">Mapbox Access Token <span className="text-red-500">*</span></label>
               <input
@@ -468,7 +561,7 @@ const PropertyMapGenerator = () => {
                 value={mapboxToken}
                 onChange={(e) => {
                   setMapboxToken(e.target.value);
-                  setMapInitialized(false); // Reset map initialization when token changes
+                  setMapInitialized(false);
                 }}
                 placeholder="Enter your Mapbox access token"
               />
@@ -490,80 +583,36 @@ const PropertyMapGenerator = () => {
             </div>
             
             <div className="mb-4">
-              <label className="block text-sm font-medium mb-1">Bulk Address Input</label>
-              <div className="mb-2">
-                <textarea
-                  className="w-full p-2 border border-gray-300 rounded"
-                  rows="6"
-                  placeholder="Paste all addresses here, one per line. Format: 'Name [tab] Address'"
-                  onChange={(e) => handleBulkAddressInput(e.target.value)}
-                ></textarea>
-              </div>
-              <div className="text-xs text-gray-600 mb-4">
-                Format examples:<br/>
-                "Primary [tab] 123 Main St, City, State"<br/>
-                "Comparable 1 [tab] 456 Oak Ave, City, State"
-              </div>
+              <label className="block text-sm font-medium mb-1">Map Style</label>
+              <select
+                className="w-full p-2 border border-gray-300 rounded"
+                value={mapStyle}
+                onChange={(e) => setMapStyle(e.target.value)}
+              >
+                {Object.entries(mapboxStyles).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
             </div>
-            
-            <div className="border-t border-gray-200 pt-4 mb-4">
-              <div className="flex justify-between items-center">
-                <label className="block text-sm font-medium">Properties</label>
-                <button 
-                  onClick={handleAddProperty}
-                  className="text-sm text-blue-600 hover:text-blue-800"
-                  disabled={properties.filter(p => p.type === 'comparable').length >= 12}
-                >
-                  + Add Comparable
-                </button>
-              </div>
-              
-              {/* Properties list with editable names and addresses */}
-              {properties.map((property) => (
-                <div key={property.id} className="mt-3 p-2 border border-gray-200 rounded">
-                  <div className="flex items-center justify-between mb-2">
-                    <input
-                      type="text"
-                      className="flex-grow p-1 border border-gray-300 rounded"
-                      value={property.name}
-                      onChange={(e) => handlePropertyChange(property.id, 'name', e.target.value)}
-                      placeholder="Property Name"
-                    />
-                    {property.type !== 'primary' && (
-                      <button
-                        onClick={() => handleRemoveProperty(property.id)}
-                        className="ml-2 px-2 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-                      >
-                        ×
-                      </button>
-                    )}
-                  </div>
-                  <input
-                    type="text"
-                    className="w-full p-1 border border-gray-300 rounded"
-                    value={property.address}
-                    onChange={(e) => handlePropertyChange(property.id, 'address', e.target.value)}
-                    placeholder="Address"
-                  />
-                </div>
-              ))}
-            </div>
-            
+          </div>
+          
+          {/* Colors and Visibility Settings */}
+          <div>
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Primary Marker</label>
+                <label className="block text-sm font-medium mb-1">Primary Color</label>
                 <input
                   type="color"
-                  className="w-full p-1 border border-gray-300 rounded h-8"
+                  className="w-full p-1 border border-gray-300 rounded h-10"
                   value={primaryColor}
                   onChange={(e) => setPrimaryColor(e.target.value)}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Comp Marker</label>
+                <label className="block text-sm font-medium mb-1">Comp Color</label>
                 <input
                   type="color"
-                  className="w-full p-1 border border-gray-300 rounded h-8"
+                  className="w-full p-1 border border-gray-300 rounded h-10"
                   value={compColor}
                   onChange={(e) => setCompColor(e.target.value)}
                 />
@@ -572,16 +621,13 @@ const PropertyMapGenerator = () => {
             
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Map Style</label>
-                <select
-                  className="w-full p-2 border border-gray-300 rounded"
-                  value={mapStyle}
-                  onChange={(e) => setMapStyle(e.target.value)}
-                >
-                  {Object.entries(mapboxStyles).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
+                <label className="block text-sm font-medium mb-1">Hospital Color</label>
+                <input
+                  type="color"
+                  className="w-full p-1 border border-gray-300 rounded h-10"
+                  value={hospitalColor}
+                  onChange={(e) => setHospitalColor(e.target.value)}
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Legend</label>
@@ -600,8 +646,8 @@ const PropertyMapGenerator = () => {
             </div>
             
             {/* Radius Circle Settings */}
-            <div className="border-t border-gray-200 pt-4 mb-4">
-              <div className="flex items-center justify-between mb-3">
+            <div className="mb-3">
+              <div className="flex items-center justify-between">
                 <label className="block text-sm font-medium">Radius Circle</label>
                 <div className="flex items-center">
                   <input
@@ -615,24 +661,24 @@ const PropertyMapGenerator = () => {
               </div>
               
               {showRadius && (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-4 mt-2">
                   <div>
-                    <label className="block text-sm font-medium mb-1">Distance (miles)</label>
+                    <label className="block text-xs text-gray-600 mb-1">Distance (miles)</label>
                     <input
                       type="number"
                       min="0.1"
                       max="50"
                       step="0.1"
-                      className="w-full p-2 border border-gray-300 rounded"
+                      className="w-full p-1 border border-gray-300 rounded"
                       value={radiusDistance}
                       onChange={(e) => setRadiusDistance(parseFloat(e.target.value) || 1)}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Circle Color</label>
+                    <label className="block text-xs text-gray-600 mb-1">Circle Color</label>
                     <input
                       type="color"
-                      className="w-full p-1 border border-gray-300 rounded h-10"
+                      className="w-full border border-gray-300 rounded h-7"
                       value={radiusColor}
                       onChange={(e) => setRadiusColor(e.target.value)}
                     />
@@ -640,111 +686,287 @@ const PropertyMapGenerator = () => {
                 </div>
               )}
             </div>
-            
-            <button
-              onClick={handleUpdateMap}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 mb-3"
-              disabled={loading || !mapboxToken}
-            >
-              {loading ? 'Processing...' : 'Update Map'}
-            </button>
-            
-            <button
-              onClick={exportMap}
-              className="w-full bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700"
-              disabled={loading || markers.length === 0}
-            >
-              {loading ? 'Processing...' : 'Export Map (PNG)'}
-            </button>
-            
-            {error && (
-              <div className="mt-4 p-2 bg-red-100 text-red-700 rounded text-sm">
-                {error}
-              </div>
-            )}
-            
-            <div className="mt-4 p-2 bg-gray-100 rounded text-xs text-gray-600">
-              <p>Powered by Mapbox</p>
-              <p className="mt-1">Usage notes:</p>
-              <ul className="list-disc pl-4 mt-1">
-                <li>You need a Mapbox token (free tier allows 100,000 geocoding requests/month)</li>
-                <li>Enter full addresses for best results</li>
-                <li>Use the legend to identify properties</li>
-                <li>Radius circle shows distance from primary property</li>
-              </ul>
+          </div>
+          
+          {/* Bulk Address Input */}
+          <div>
+            <label className="block text-sm font-medium mb-1">Bulk Address Input</label>
+            <div className="mb-2">
+              <textarea
+                className="w-full p-2 border border-gray-300 rounded"
+                rows="6"
+                placeholder="Paste all addresses here, one per line. Format: 'Name [tab] Address'"
+                onChange={(e) => handleBulkAddressInput(e.target.value)}
+              ></textarea>
+            </div>
+            <div className="text-xs text-gray-600 mb-2">
+              Format examples:<br/>
+              "Primary [tab] 123 Main St, City, State"<br/>
+              "Hospital 1 [tab] 456 Oak Ave, City, State"
+            </div>
+            <div className="flex space-x-2">
+              <button
+                onClick={handleUpdateMap}
+                className="flex-1 bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
+                disabled={loading || !mapboxToken}
+              >
+                {loading ? 'Processing...' : 'Update Map'}
+              </button>
+              <button
+                onClick={exportMap}
+                className="flex-1 bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700"
+                disabled={loading || markers.length === 0}
+              >
+                {loading ? 'Processing...' : 'Export Map'}
+              </button>
             </div>
           </div>
         </div>
         
-        {/* Map preview section */}
-        <div className="md:col-span-2">
-          <div className="bg-white p-4 rounded shadow h-full">
-            <h2 className="text-lg font-semibold mb-4">Map Preview</h2>
-            
-            {!mapboxToken ? (
-              <div className="border border-gray-300 rounded p-6 text-center h-64 flex items-center justify-center">
-                <div>
-                  <p className="mb-4 text-gray-700">Enter your Mapbox access token to load the map</p>
-                  <a 
-                    href="https://account.mapbox.com/access-tokens/" 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    className="text-blue-500 hover:text-blue-700 text-sm"
-                  >
-                    Get a free token from Mapbox
-                  </a>
-                </div>
+        {error && (
+          <div className="mt-4 p-2 bg-red-100 text-red-700 rounded text-sm">
+            {error}
+          </div>
+        )}
+      </div>
+      
+      {/* Map and Legend Row */}
+      <div className="flex flex-col md:flex-row mb-6">
+        {/* Map Preview */}
+        <div className="flex-grow bg-white p-4 rounded shadow">
+          <h2 className="text-lg font-semibold mb-4">Map Preview</h2>
+          
+          {!mapboxToken ? (
+            <div className="border border-gray-300 rounded p-6 text-center h-64 flex items-center justify-center">
+              <div>
+                <p className="mb-4 text-gray-700">Enter your Mapbox access token to load the map</p>
+                <a 
+                  href="https://account.mapbox.com/access-tokens/" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="text-blue-500 hover:text-blue-700 text-sm"
+                >
+                  Get a free token from Mapbox
+                </a>
               </div>
-            ) : (
-              <div className="border border-gray-300 rounded overflow-hidden" style={{ height: "500px" }}>
-                <div ref={mapRef} style={{ width: "100%", height: "100%" }}></div>
+            </div>
+          ) : (
+            <div className="border border-gray-300 rounded overflow-hidden" style={{ height: "500px" }}>
+              <div ref={mapRef} style={{ width: "100%", height: "100%" }}></div>
+            </div>
+          )}
+        </div>
+        
+        {/* Property Legend */}
+        {showLegend && (
+          <div className="w-full md:w-64 bg-white p-4 rounded shadow md:ml-4 mt-4 md:mt-0">
+            <h2 className="font-semibold mb-3">Property Legend</h2>
+            
+            {/* Primary property */}
+            {properties.filter(p => p.type === 'primary').map(property => (
+              <div key={property.id} className="flex items-center mb-2">
+                <div 
+                  className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mr-2" 
+                  style={{ backgroundColor: primaryColor }}
+                >
+                  <span className="text-white text-xs font-bold">P</span>
+                </div>
+                <div className="flex-grow truncate text-sm">{property.name}</div>
+              </div>
+            ))}
+            
+            {/* Show radius info if enabled */}
+            {showRadius && properties.find(p => p.type === 'primary') && (
+              <div className="flex items-center mb-2 ml-2">
+                <div 
+                  className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center mr-2" 
+                  style={{ border: `2px solid ${radiusColor}`, backgroundColor: 'transparent' }}
+                ></div>
+                <div className="flex-grow truncate text-sm text-gray-600">{radiusDistance} mile radius</div>
               </div>
             )}
             
-            {/* Property Legend (displayed on desktop devices next to map) */}
-            {showLegend && markers.length > 0 && (
-              <div className="mt-4 p-3 border border-gray-200 rounded overflow-y-auto max-h-48 hidden md:block">
-                <div className="font-semibold mb-2">Property Legend</div>
-                
-                {/* Primary property */}
-                {properties.filter(p => p.type === 'primary').map(property => (
-                  <div key={property.id} className="flex items-center mb-2">
-                    <div 
-                      className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mr-2" 
-                      style={{ backgroundColor: primaryColor }}
-                    >
-                      <span className="text-white text-xs font-bold">P</span>
-                    </div>
-                    <div className="flex-grow truncate text-sm">{property.name}</div>
-                  </div>
-                ))}
-                
-                {/* Show radius info if enabled */}
-                {showRadius && properties.find(p => p.type === 'primary') && (
-                  <div className="flex items-center mb-2 ml-2">
-                    <div 
-                      className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center mr-2" 
-                      style={{ border: `2px solid ${radiusColor}`, backgroundColor: 'transparent' }}
-                    ></div>
-                    <div className="flex-grow truncate text-sm text-gray-600">{radiusDistance} mile radius</div>
-                  </div>
-                )}
-                
-                {/* Comparable properties */}
-                {properties.filter(p => p.type === 'comparable').map((property, i) => (
+            {/* Hospital properties */}
+            {properties.filter(p => p.type === 'hospital').map((property, i) => (
+              <div key={property.id} className="flex items-center mb-1">
+                <div 
+                  className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mr-2" 
+                  style={{ backgroundColor: hospitalColor }}
+                >
+                  <span className="text-white text-xs font-bold">H</span>
+                </div>
+                <div className="flex-grow truncate text-sm">{property.name}</div>
+              </div>
+            ))}
+            
+            {/* Comparable properties */}
+            {(() => {
+              let compCount = 0;
+              return properties.filter(p => p.type === 'comparable').map((property) => {
+                compCount++;
+                return (
                   <div key={property.id} className="flex items-center mb-1">
                     <div 
                       className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mr-2" 
                       style={{ backgroundColor: compColor }}
                     >
-                      <span className="text-white text-xs font-bold">{i + 1}</span>
+                      <span className="text-white text-xs font-bold">{compCount}</span>
                     </div>
                     <div className="flex-grow truncate text-sm">{property.name}</div>
                   </div>
-                ))}
-              </div>
-            )}
+                );
+              });
+            })()}
+            
+            <div className="mt-4 text-xs text-gray-500">
+              <p>Double-click on map to zoom in</p>
+              <p>Drag to pan around</p>
+            </div>
           </div>
+        )}
+      </div>
+      
+      {/* Property List and Data Table */}
+      <div className="bg-white p-4 rounded shadow">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold">Property Details</h2>
+          <div className="flex space-x-2">
+            <button 
+              onClick={() => handleAddProperty('comparable')}
+              className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+              disabled={properties.filter(p => p.type === 'comparable').length >= 12}
+            >
+              + Add Comparable
+            </button>
+            <button 
+              onClick={() => handleAddProperty('hospital')}
+              className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+              disabled={properties.filter(p => p.type === 'hospital').length >= 5}
+            >
+              + Add Hospital
+            </button>
+          </div>
+        </div>
+        
+        {/* Property Data Table */}
+        <div className="overflow-x-auto">
+          <table className="min-w-full bg-white border border-gray-200">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="py-2 px-3 border-b border-gray-200 text-left text-xs font-medium text-gray-700 uppercase tracking-wider w-8">#</th>
+                <th className="py-2 px-3 border-b border-gray-200 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Name</th>
+                <th className="py-2 px-3 border-b border-gray-200 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Type</th>
+                <th className="py-2 px-3 border-b border-gray-200 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Address</th>
+                <th className="py-2 px-3 border-b border-gray-200 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">GLA (SF)</th>
+                <th className="py-2 px-3 border-b border-gray-200 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Occupancy (%)</th>
+                <th className="py-2 px-3 border-b border-gray-200 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Rate ($/SF)</th>
+                <th className="py-2 px-3 border-b border-gray-200 text-left text-xs font-medium text-gray-700 uppercase tracking-wider w-10">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {properties.map((property, index) => {
+                // Determine marker style based on property type
+                let markerColor, markerText;
+                if (property.type === 'primary') {
+                  markerColor = primaryColor;
+                  markerText = 'P';
+                } else if (property.type === 'hospital') {
+                  markerColor = hospitalColor;
+                  markerText = 'H';
+                } else {
+                  markerColor = compColor;
+                  markerText = properties.filter(p => p.type === 'comparable' && p.id <= property.id).length;
+                }
+                
+                return (
+                  <tr key={property.id} className="hover:bg-gray-50">
+                    <td className="py-2 px-3 border-b border-gray-200">
+                      <div 
+                        className="w-6 h-6 rounded-full flex items-center justify-center" 
+                        style={{ backgroundColor: markerColor }}
+                      >
+                        <span className="text-white text-xs font-bold">{markerText}</span>
+                      </div>
+                    </td>
+                    <td className="py-2 px-3 border-b border-gray-200">
+                      <input
+                        type="text"
+                        className="w-full p-1 border border-gray-300 rounded"
+                        value={property.name}
+                        onChange={(e) => handlePropertyChange(property.id, 'name', e.target.value)}
+                      />
+                    </td>
+                    <td className="py-2 px-3 border-b border-gray-200">
+                      {property.type === 'primary' ? (
+                        <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">Primary</span>
+                      ) : (
+                        <select
+                          value={property.type}
+                          onChange={(e) => handlePropertyTypeChange(property.id, e.target.value)}
+                          className="p-1 border border-gray-300 rounded text-sm w-full"
+                        >
+                          <option value="comparable">Comparable</option>
+                          <option value="hospital">Hospital</option>
+                        </select>
+                      )}
+                    </td>
+                    <td className="py-2 px-3 border-b border-gray-200">
+                      <input
+                        type="text"
+                        className="w-full p-1 border border-gray-300 rounded"
+                        value={property.address}
+                        onChange={(e) => handlePropertyChange(property.id, 'address', e.target.value)}
+                      />
+                    </td>
+                    <td className="py-2 px-3 border-b border-gray-200">
+                      <input
+                        type="text"
+                        className="w-full p-1 border border-gray-300 rounded"
+                        value={property.gla}
+                        onChange={(e) => handlePropertyChange(property.id, 'gla', e.target.value)}
+                        placeholder="Size in SF"
+                      />
+                    </td>
+                    <td className="py-2 px-3 border-b border-gray-200">
+                      <input
+                        type="text"
+                        className="w-full p-1 border border-gray-300 rounded"
+                        value={property.occupancy}
+                        onChange={(e) => handlePropertyChange(property.id, 'occupancy', e.target.value)}
+                        placeholder="% Occupied"
+                      />
+                    </td>
+                    <td className="py-2 px-3 border-b border-gray-200">
+                      <input
+                        type="text"
+                        className="w-full p-1 border border-gray-300 rounded"
+                        value={property.rate}
+                        onChange={(e) => handlePropertyChange(property.id, 'rate', e.target.value)}
+                        placeholder="$/SF"
+                      />
+                    </td>
+                    <td className="py-2 px-3 border-b border-gray-200">
+                      {property.type !== 'primary' && (
+                        <button
+                          onClick={() => handleRemoveProperty(property.id)}
+                          className="text-red-600 hover:text-red-800"
+                          title="Remove"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        
+        <div className="mt-4 text-xs text-gray-600">
+          <p>GLA = Gross Leasable Area in square feet</p>
+          <p>Occupancy is entered as percentage (e.g., 95 for 95%)</p>
+          <p>Rate is entered as dollars per square foot (e.g., 24.50 for $24.50/SF)</p>
         </div>
       </div>
     </div>
