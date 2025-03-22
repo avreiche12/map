@@ -406,136 +406,363 @@ const PropertyMapGenerator = () => {
   };
   
   // Export map as PNG
-  const exportMap = () => {
-    if (!map) return;
+ // Export map as PNG or PDF
+const exportMap = async (format = 'png') => {
+  if (!map) return;
+  
+  setLoading(true);
+  setError(null);
+  
+  try {
+    // Create a container for the export
+    const exportContainer = document.createElement('div');
+    exportContainer.style.position = 'absolute';
+    exportContainer.style.left = '-9999px';
+    exportContainer.style.width = '1200px'; // Fixed width for consistency
+    document.body.appendChild(exportContainer);
     
-    setLoading(true);
+    // Create a map container
+    const mapContainer = document.createElement('div');
+    mapContainer.style.width = '1200px';
+    mapContainer.style.height = '800px';
+    mapContainer.style.position = 'relative';
+    exportContainer.appendChild(mapContainer);
     
-    try {
-      // Create a legend element if it doesn't exist
-      let legendControl = document.querySelector('.map-legend-control');
-      if (!legendControl) {
-        legendControl = L.control({ position: 'topright' });
-        legendControl.onAdd = function() {
-          const div = L.DomUtil.create('div', 'map-legend-control legend');
-          div.style.backgroundColor = 'white';
-          div.style.padding = '10px';
-          div.style.borderRadius = '5px';
-          div.style.border = '1px solid #ccc';
-          div.style.marginBottom = '10px';
-          div.style.maxWidth = '250px';
-          div.style.maxHeight = '400px';
-          div.style.overflowY = 'auto';
-          div.style.fontSize = '12px';
-          
-          const primaryProperty = properties.find(p => p.type === 'primary');
-          const hospitalProperties = properties.filter(p => p.type === 'hospital' && p.address.trim());
-          const compProperties = properties.filter(p => p.type === 'comparable' && p.address.trim());
-          
-          let html = `<div style="font-weight: bold; margin-bottom: 10px; font-size: 14px;">${mapTitle}</div>`;
-          
-          if (primaryProperty) {
-            html += `
-              <div style="display: flex; align-items: center; margin-bottom: 8px;">
-                <div style="background-color: ${primaryColor}; width: 16px; height: 16px; border-radius: 50%; margin-right: 8px; flex-shrink: 0;"></div>
-                <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${primaryProperty.name}</div>
-              </div>
-            `;
-            
-            // Add radius information if enabled
-            if (showRadius) {
-              html += `
-                <div style="display: flex; align-items: center; margin-bottom: 8px; margin-left: 0.1rem;">
-                  <div style="border: 2px solid ${radiusColor}; width: 14px; height: 14px; border-radius: 50%; margin-right: 8px; flex-shrink: 0;"></div>
-                  <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${radiusDistance} mile radius</div>
-                </div>
-              `;
-            }
-          }
-          
-          // Add hospitals
-          hospitalProperties.forEach((property, i) => {
-            html += `
-              <div style="display: flex; align-items: center; margin-bottom: 6px;">
-                <div style="background-color: ${hospitalColor}; width: 16px; height: 16px; border-radius: 50%; margin-right: 8px; flex-shrink: 0; display: flex; justify-content: center; align-items: center; color: white; font-size: 10px; font-weight: bold;">H</div>
-                <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${property.name}</div>
-              </div>
-            `;
-          });
-          
-          // Add comparable properties
-          let compCount = 0;
-          compProperties.forEach((property) => {
-            compCount++;
-            html += `
-              <div style="display: flex; align-items: center; margin-bottom: 6px;">
-                <div style="background-color: ${compColor}; width: 16px; height: 16px; border-radius: 50%; margin-right: 8px; flex-shrink: 0; display: flex; justify-content: center; align-items: center; color: white; font-size: 10px; font-weight: bold;">${compCount}</div>
-                <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${property.name}</div>
-              </div>
-            `;
-          });
-          
-          div.innerHTML = html;
-          return div;
-        };
-        
-        legendControl.addTo(map);
+    // Clone the map for export
+    const exportMap = L.map(mapContainer, {
+      zoomControl: false,
+      attributionControl: false,
+      scrollWheelZoom: false,
+      dragging: false,
+      doubleClickZoom: false
+    });
+    
+    // Match the zoom level and center of the original map
+    exportMap.setView(map.getCenter(), map.getZoom());
+    
+    // Add the same tile layer to the export map
+    L.tileLayer(
+      `https://api.mapbox.com/styles/v1/mapbox/${mapStyle}/tiles/{z}/{x}/{y}?access_token=${mapboxToken}`,
+      {
+        tileSize: 512,
+        zoomOffset: -1,
+        maxZoom: 19
+      }
+    ).addTo(exportMap);
+    
+    // Add markers to the export map
+    const markerPromises = markers.map(marker => {
+      const latLng = marker.getLatLng();
+      const property = marker.options.property;
+      
+      let markerHtml;
+      if (property.type === 'primary') {
+        markerHtml = `<div style="background-color: ${primaryColor}; width: 24px; height: 24px; border-radius: 50%; border: 2px solid white; display: flex; justify-content: center; align-items: center; color: white; font-weight: bold;">P</div>`;
+      } else if (property.type === 'hospital') {
+        markerHtml = `<div style="background-color: ${hospitalColor}; width: 22px; height: 22px; border-radius: 50%; border: 2px solid white; display: flex; justify-content: center; align-items: center; color: white; font-size: 12px; font-weight: bold;">H</div>`;
+      } else {
+        const compIndex = properties
+          .filter(p => p.type === 'comparable')
+          .findIndex(p => p.id === property.id) + 1;
+        markerHtml = `<div style="background-color: ${compColor}; width: 22px; height: 22px; border-radius: 50%; border: 2px solid white; display: flex; justify-content: center; align-items: center; color: white; font-size: 12px; font-weight: bold;">${compIndex}</div>`;
       }
       
-      // Add title to the map
-      let titleControl = document.querySelector('.map-title-control');
-      if (!titleControl) {
-        titleControl = L.control({ position: 'topleft' });
-        titleControl.onAdd = function() {
-          const div = L.DomUtil.create('div', 'map-title-control');
-          div.style.backgroundColor = 'white';
-          div.style.padding = '5px 10px';
-          div.style.borderRadius = '5px';
-          div.style.border = '1px solid #ccc';
-          div.style.fontSize = '16px';
-          div.style.fontWeight = 'bold';
-          div.innerHTML = mapTitle;
-          return div;
-        };
-        
-        titleControl.addTo(map);
-      }
-
-      // Wait for controls to render
-      setTimeout(() => {
-        // Use html2canvas to capture the map
-        html2canvas(mapRef.current, {
-          useCORS: true,
-          allowTaint: true,
-          backgroundColor: null
-        }).then(canvas => {
-          // Convert canvas to PNG
-          const dataUrl = canvas.toDataURL('image/png');
-          
-          // Create a link to download the image
-          const link = document.createElement('a');
-          link.href = dataUrl;
-          link.download = `${mapTitle.replace(/\s+/g, '_')}.png`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          
-          // Remove controls after export
-          map.removeControl(legendControl);
-          map.removeControl(titleControl);
-          setLoading(false);
-        }).catch(err => {
-          console.error('Error exporting map:', err);
-          setError('There was an error exporting the map. Please try again.');
-          setLoading(false);
-        });
-      }, 500);
-    } catch (err) {
-      console.error('Export error:', err);
-      setError('There was an error exporting the map. Please try again.');
-      setLoading(false);
+      const icon = L.divIcon({
+        html: markerHtml,
+        className: '',
+        iconSize: property.type === 'primary' ? [24, 24] : [22, 22],
+        iconAnchor: property.type === 'primary' ? [12, 12] : [11, 11]
+      });
+      
+      return L.marker([latLng.lat, latLng.lng], { 
+        icon: icon,
+        property: property
+      }).addTo(exportMap);
+    });
+    
+    // Add radius circle if enabled
+    if (showRadius && radiusCircle) {
+      const center = radiusCircle.getLatLng();
+      const radiusInMeters = radiusDistance * 1609.34;
+      
+      L.circle([center.lat, center.lng], {
+        radius: radiusInMeters,
+        color: radiusColor,
+        fillColor: radiusColor,
+        fillOpacity: 0.1,
+        weight: 2
+      }).addTo(exportMap);
     }
-  };
+    
+    // Add title to the export map
+    const titleDiv = document.createElement('div');
+    titleDiv.className = 'export-map-title';
+    titleDiv.style.position = 'absolute';
+    titleDiv.style.top = '10px';
+    titleDiv.style.left = '10px';
+    titleDiv.style.zIndex = '1000';
+    titleDiv.style.backgroundColor = 'white';
+    titleDiv.style.padding = '8px 16px';
+    titleDiv.style.borderRadius = '4px';
+    titleDiv.style.boxShadow = '0 1px 5px rgba(0,0,0,0.2)';
+    titleDiv.style.fontSize = '18px';
+    titleDiv.style.fontWeight = 'bold';
+    titleDiv.innerHTML = mapTitle;
+    mapContainer.appendChild(titleDiv);
+    
+    // Create legend as a separate element
+    const legendDiv = document.createElement('div');
+    legendDiv.className = 'export-map-legend';
+    legendDiv.style.position = 'absolute';
+    legendDiv.style.top = '10px';
+    legendDiv.style.right = '10px';
+    legendDiv.style.zIndex = '1000';
+    legendDiv.style.backgroundColor = 'white';
+    legendDiv.style.padding = '10px';
+    legendDiv.style.borderRadius = '4px';
+    legendDiv.style.boxShadow = '0 1px 5px rgba(0,0,0,0.2)';
+    legendDiv.style.width = '220px';
+    legendDiv.style.maxHeight = '700px';
+    legendDiv.style.overflowY = 'auto';
+    legendDiv.style.fontSize = '12px';
+    
+    const primaryProperty = properties.find(p => p.type === 'primary');
+    const hospitalProperties = properties.filter(p => p.type === 'hospital' && p.address.trim());
+    const compProperties = properties.filter(p => p.type === 'comparable' && p.address.trim());
+    
+    let legendHtml = `<div style="font-weight: bold; margin-bottom: 10px; font-size: 14px;">Legend</div>`;
+    
+    if (primaryProperty) {
+      legendHtml += `
+        <div style="display: flex; align-items: center; margin-bottom: 8px;">
+          <div style="background-color: ${primaryColor}; width: 16px; height: 16px; border-radius: 50%; margin-right: 8px; flex-shrink: 0;"></div>
+          <div style="white-space: normal; word-break: break-word;">${primaryProperty.name}</div>
+        </div>
+      `;
+      
+      // Add radius information if enabled
+      if (showRadius) {
+        legendHtml += `
+          <div style="display: flex; align-items: center; margin-bottom: 8px; margin-left: 0.1rem;">
+            <div style="border: 2px solid ${radiusColor}; width: 14px; height: 14px; border-radius: 50%; margin-right: 8px; flex-shrink: 0;"></div>
+            <div style="white-space: normal; word-break: break-word;">${radiusDistance} mile radius</div>
+          </div>
+        `;
+      }
+    }
+    
+    // Add hospitals
+    hospitalProperties.forEach((property) => {
+      legendHtml += `
+        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+          <div style="background-color: ${hospitalColor}; width: 16px; height: 16px; border-radius: 50%; margin-right: 8px; flex-shrink: 0; display: flex; justify-content: center; align-items: center; color: white; font-size: 10px; font-weight: bold;">H</div>
+          <div style="white-space: normal; word-break: break-word;">${property.name}</div>
+        </div>
+      `;
+    });
+    
+    // Add comparable properties
+    compProperties.forEach((property, index) => {
+      legendHtml += `
+        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+          <div style="background-color: ${compColor}; width: 16px; height: 16px; border-radius: 50%; margin-right: 8px; flex-shrink: 0; display: flex; justify-content: center; align-items: center; color: white; font-size: 10px; font-weight: bold;">${index + 1}</div>
+          <div style="white-space: normal; word-break: break-word;">${property.name}</div>
+        </div>
+      `;
+    });
+    
+    legendDiv.innerHTML = legendHtml;
+    mapContainer.appendChild(legendDiv);
+    
+    // Wait for map to fully render with markers
+    await Promise.all(markerPromises);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    if (format === 'png') {
+      // Use html2canvas to capture the map
+      const canvas = await html2canvas(mapContainer, {
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: null,
+        width: 1200,
+        height: 800,
+        scale: 1
+      });
+      
+      // Convert canvas to PNG
+      const mapDataUrl = canvas.toDataURL('image/png');
+      
+      // Create a link to download the image
+      const link = document.createElement('a');
+      link.href = mapDataUrl;
+      link.download = `${mapTitle.replace(/\s+/g, '_')}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else if (format === 'pdf') {
+      // Import jsPDF and use only if format is PDF
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+      document.body.appendChild(script);
+      
+      await new Promise(resolve => {
+        script.onload = resolve;
+      });
+      
+      // Capture the map as an image
+      const canvas = await html2canvas(mapContainer, {
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: null,
+        width: 1200,
+        height: 800
+      });
+      
+      const mapImageData = canvas.toDataURL('image/png');
+      
+      // Create a PDF document (landscape A4)
+      const pdf = new window.jspdf.jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4'
+      });
+      
+      // Add map image to first page
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgRatio = canvas.height / canvas.width;
+      const imgWidth = pdfWidth - 20;
+      const imgHeight = imgWidth * imgRatio;
+      
+      pdf.addImage(mapImageData, 'PNG', 10, 10, imgWidth, imgHeight);
+      
+      // Add property details table on the second page
+      pdf.addPage();
+      pdf.setFontSize(16);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Property Details', 10, 15);
+      
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'normal');
+      
+      // Define table columns
+      const columns = ['Property', 'Address', 'Type', 'GLA (SF)', 'Occupancy (%)', 'Rate ($/SF)'];
+      const columnWidths = [70, 90, 20, 30, 30, 30];
+      
+      // Filter properties with addresses
+      const validProperties = properties.filter(p => p.address.trim());
+      
+      // Draw table header
+      pdf.setFont('helvetica', 'bold');
+      let yPos = 25;
+      let xPos = 10;
+      
+      columns.forEach((column, i) => {
+        pdf.text(column, xPos, yPos);
+        xPos += columnWidths[i];
+      });
+      
+      pdf.setLineWidth(0.2);
+      pdf.line(10, yPos + 2, pdfWidth - 10, yPos + 2);
+      
+      // Draw table rows
+      pdf.setFont('helvetica', 'normal');
+      yPos += 10;
+      
+      validProperties.forEach((property, i) => {
+        xPos = 10;
+        
+        const type = property.type === 'primary' ? 'Primary' : 
+                    property.type === 'hospital' ? 'Hospital' : 'Comparable';
+        
+        const formattedGLA = property.gla ? formatNumber(property.gla, 'gla') : '';
+        const formattedOccupancy = property.occupancy ? formatNumber(property.occupancy, 'occupancy') : '';
+        const formattedRate = property.rate ? formatNumber(property.rate, 'rate') : '';
+        
+        // Property name with marker symbol
+        let markerSymbol;
+        if (property.type === 'primary') {
+          markerSymbol = 'P';
+        } else if (property.type === 'hospital') {
+          markerSymbol = 'H';
+        } else {
+          const index = properties.filter(p => p.type === 'comparable').findIndex(p => p.id === property.id) + 1;
+          markerSymbol = index.toString();
+        }
+        
+        const nameWithMarker = `${markerSymbol}: ${property.name}`;
+        
+        // Handle long text by splitting into multiple lines if needed
+        const nameLines = pdf.splitTextToSize(nameWithMarker, columnWidths[0]);
+        pdf.text(nameLines, xPos, yPos);
+        xPos += columnWidths[0];
+        
+        const addressLines = pdf.splitTextToSize(property.address, columnWidths[1]);
+        pdf.text(addressLines, xPos, yPos);
+        xPos += columnWidths[1];
+        
+        pdf.text(type, xPos, yPos);
+        xPos += columnWidths[2];
+        
+        pdf.text(formattedGLA, xPos, yPos);
+        xPos += columnWidths[3];
+        
+        pdf.text(formattedOccupancy, xPos, yPos);
+        xPos += columnWidths[4];
+        
+        pdf.text(formattedRate, xPos, yPos);
+        
+        // Calculate maximum number of lines used
+        const maxLines = Math.max(
+          nameLines.length,
+          addressLines.length,
+          1 // other fields are single line
+        );
+        
+        yPos += 5 * maxLines + 3; // Adjust spacing based on content
+        
+        // Add a separator line between rows
+        pdf.line(10, yPos - 1, pdfWidth - 10, yPos - 1);
+        
+        // Add a page break if needed
+        if (yPos > pdfHeight - 15 && i < validProperties.length - 1) {
+          pdf.addPage();
+          pdf.setFont('helvetica', 'bold');
+          yPos = 15;
+          
+          // Redraw header on new page
+          xPos = 10;
+          columns.forEach((column, i) => {
+            pdf.text(column, xPos, yPos);
+            xPos += columnWidths[i];
+          });
+          
+          pdf.line(10, yPos + 2, pdfWidth - 10, yPos + 2);
+          pdf.setFont('helvetica', 'normal');
+          yPos += 10;
+        }
+      });
+      
+      // Save the PDF
+      pdf.save(`${mapTitle.replace(/\s+/g, '_')}.pdf`);
+    }
+    
+    // Clean up
+    exportMap.remove();
+    document.body.removeChild(exportContainer);
+    setLoading(false);
+    
+  } catch (err) {
+    console.error('Export error:', err);
+    setError(`There was an error exporting the map: ${err.message}`);
+    setLoading(false);
+  }
+};
+
+// Add a new function for PDF export that will call the main exportMap with 'pdf' format
+const exportPDF = () => {
+  exportMap('pdf');
+};
   
   // Update map with markers when properties change
   const handleUpdateMap = () => {
@@ -719,7 +946,15 @@ const PropertyMapGenerator = () => {
                 className="flex-1 bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700"
                 disabled={loading || markers.length === 0}
               >
-                {loading ? 'Processing...' : 'Export Map'}
+                {loading ? 'Processing...' : 'Export as PNG'}
+              </button>
+              <button
+                onClick={exportPDF}
+                className="flex-1 bg-green-700 text-white py-2 px-4 rounded-r hover:bg-green-800"
+                disabled={loading || markers.length === 0}
+                title="Export as PDF"
+              >
+                {loading ? 'Processing...' : 'PDF'}
               </button>
             </div>
           </div>
