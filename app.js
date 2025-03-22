@@ -1,3 +1,5 @@
+//key - pk.eyJ1IjoidnJlaWNoZSIsImEiOiJjbThodHEza2YwNWY1Mm1wenltdnMwN3AxIn0.8NiWuvDaWLPs_hmQt_8eCQ
+
 // PropertyMapGenerator Component
 const PropertyMapGenerator = () => {
   const mapRef = React.useRef(null);
@@ -443,9 +445,9 @@ const PropertyMapGenerator = () => {
             // Add radius information if enabled
             if (showRadius) {
               html += `
-                <div style="display: flex; align-items: center; margin-bottom: 8px; margin-left: 4px;">
+                <div style="display: flex; align-items: center; margin-bottom: 8px; margin-left: 0.1rem;">
                   <div style="border: 2px solid ${radiusColor}; width: 14px; height: 14px; border-radius: 50%; margin-right: 8px; flex-shrink: 0;"></div>
-                  <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px;">${radiusDistance} mile radius</div>
+                  <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${radiusDistance} mile radius</div>
                 </div>
               `;
             }
@@ -777,12 +779,12 @@ const PropertyMapGenerator = () => {
             
             {/* Show radius info if enabled */}
             {showRadius && properties.find(p => p.type === 'primary') && (
-              <div className="flex items-center mb-2 ml-2">
+              <div className="flex items-center mb-2 ml-0.5">
                 <div 
                   className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center mr-2" 
                   style={{ border: `2px solid ${radiusColor}`, backgroundColor: 'transparent' }}
                 ></div>
-                <div className="flex-grow truncate text-sm text-gray-600">{radiusDistance} mile radius</div>
+                <div className="flex-grow truncate text-sm">{radiusDistance} mile radius</div>
               </div>
             )}
             
